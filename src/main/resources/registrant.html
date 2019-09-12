@@ -1,0 +1,78 @@
+<!--
+  ~ Copyright (c) 2019  Scott C. Sosna  ALL RIGHTS RESERVED
+  -->
+
+<html>
+<head>
+    <title>Filings: Registrant-Lobbyist-Client</title>
+    <style type="text/css">
+        #viz {
+            width: 1932px;
+            height: 1244px;
+        }
+    </style>
+    <script src="https://rawgit.com/neo4j-contrib/neovis.js/master/dist/neovis.js"></script>
+</head>
+<script>
+    function draw() {
+        var config = {
+            container_id: "viz",
+            server_url: "bolt://localhost",
+            server_user: "neo4j",
+            server_password: "password",
+            arrows: true,
+            labels: {
+                "Client": {
+                    caption: "name",
+                    community: "name"
+//                    ,sizeCypher: "MATCH (n) WHERE id(n) = {id} MATCH (n)-[]-(c) RETURN count(c)"
+                },
+                "Filing": {
+                    caption: false
+                },
+                "GovernmentEntity": {
+                    caption: "name"
+                },
+                "Issue": {
+                    caption: "code"
+                },
+                "Lobbyist": {
+                    caption: "surname"
+                },
+                "Registrant": {
+                    caption: "name"
+                }
+            },
+            relationships: {
+                "ABOUT": {
+                    thickness: 0.50
+                },
+                "ADVOCATING_FOR": {
+                    thickness: 0.50
+                },
+                "EMPLOYS": {
+                    thickness: 0.50
+                },
+                "ENGAGES": {
+                    thickness: 0.50
+                },
+                "FILED": {
+                    thickness: 0.50
+                },
+                "ON_BEHALF_OF": {
+                    thickness: 0.50
+                },
+                "TARGETED_AT": {
+                    thickness: 0.50
+                }
+            },
+            initial_cypher: "MATCH (r:Registrant) WITH r LIMIT 250 MATCH p = (:Client)-[:ENGAGES]->(r)-[:EMPLOYS]->(:Lobbyist) return p"
+        }
+        var viz = new NeoVis.default(config);
+        viz.render();
+    }
+</script>
+<body onload="draw()">
+<div id="viz"></div>
+</body>
+</html>

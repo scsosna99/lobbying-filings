@@ -1,0 +1,90 @@
+NOTE: These queries are originally from a different schema and might need adjusting, haven't fixed all of them yet.
+
+//  Filings with less than n issues attached
+MATCH (g:GovernmentEntity)<-[]-(f:Filing)-[]->(i:Issue)
+WITH g, f, COUNT(i) AS cnt
+WHERE f.amount > 0 AND
+      cnt < 5
+MATCH p=(g)<-[r1]-(f)<-[r2]-(l:Lobbyist)<-[r3:EMPLOYS]-(r:Registrant)
+RETURN p LIMIT 2000
+
+//  Filings by goverment entity by all dates currently loaded
+MATCH (f:Filing)--(g:GovernmentEntity)
+WITH f, g, apoc.date.fields(LEFT(f.receivedOn, 10), 'yyyy-MM-dd') AS received
+RETURN g.name, COUNT(f) ORDER BY COUNT(f) DESC;
+
+//  Filings by government entity for specific date/date range
+MATCH (f:Filing)--(g:GovernmentEntity)
+WITH f, g, apoc.date.fields(LEFT(f.receivedOn, 10), 'yyyy-MM-dd') AS received
+WHERE received.years = 2019 AND received.months = 4 AND received.days >= 1 AND received.days <= 7
+RETURN g.name, COUNT(f) ORDER BY COUNT(f) DESC;
+
+//  Registrants who've filed with government entity for specific date range, virtual nodes/relationships
+MATCH (r:Registrant)--(f:Filing)--(g:GovernmentEntity)
+WITH r, f, g, apoc.date.fields(LEFT(f.receivedOn, 10), 'yyyy-MM-dd') AS received
+WHERE received.months = 4 AND received.days >= 1 AND received.days <= 2 AND g.name <> 'SENATE' AND g.name <> 'HOUSE OF REPRESENTATIVES'
+WITH COLLECT(DISTINCT r.name) AS registrants,
+     COLLECT(DISTINCT g.name) AS gents
+WITH [gname IN gents | apoc.create.vNode(['gent'],{name:gname})] AS gNodes,
+     [rname in registrants | apoc.create.vNode(['Registrant'],{name:rname})] AS rNodes
+WITH apoc.map.groupBy(gNodes, 'name') AS gvs,
+     apoc.map.groupBy(rNodes, 'name') AS rvs
+MATCH (r:Registrant)--(f:Filing)--(g:GovernmentEntity)
+WITH gvs, rvs, r, f, g, apoc.date.fields(LEFT(f.receivedOn, 10), 'yyyy-MM-dd') AS received
+WHERE received.months = 4 AND received.days >= 1 AND received.days <= 2 AND g.name <> 'SENATE' AND g.name <> 'HOUSE OF REPRESENTATIVES'
+RETURN rvs,
+       gvs,
+       apoc.create.vRelationship (rvs[r.name], 'LOBBIED', {filingCnt:COUNT(f), filingAmt:SUM(f.amount)}, gvs[g.name]) AS rel
+
+
+//  Registrants who've filed with USDA, virtual nodes/relationshipse
+MATCH (r:Registrant)--(f:Filing)--(g:GovernmentEntity {name:'Agriculture, Dept of (USDA)'})
+WITH r, f, g, apoc.date.fields(LEFT(f.receivedOn, 10), 'yyyy-MM-dd') AS received
+  WHERE received.months = 4 AND received.days >= 1 AND received.days <= 7
+WITH COLLECT(DISTINCT r.name) AS registrants,
+     COLLECT(DISTINCT g.name) AS gents
+WITH [gname IN gents | apoc.create.vNode(['gent'],{name:gname})] AS gNodes,
+     [rname in registrants | apoc.create.vNode(['Registrant'],{name:rname})] AS rNodes
+WITH apoc.map.groupBy(gNodes, 'name') AS gvs,
+     apoc.map.groupBy(rNodes, 'name') AS rvs
+MATCH (r:Registrant)--(f:Filing)--(g:GovernmentEntity {name:'Agriculture, Dept of (USDA)'})
+WITH gvs, rvs, r, f, g, apoc.date.fields(LEFT(f.receivedOn, 10), 'yyyy-MM-dd') AS received
+  WHERE received.months = 4 AND received.days >= 1 AND received.days <= 7
+RETURN rvs,
+       gvs,
+       apoc.create.vRelationship (rvs[r.name], 'LOBBIED', {filingCnt:COUNT(f), filingAmt:SUM(f.amount)}, gvs[g.name]) AS rel;
+
+
+
+
+MATCH (f:Filing) - [r] -> (g:GovernmentEntity) RETURN g.name, count(f) ORDER BY count(f) DESC
+
+MATCH (g:GovernmentEntity {name:"Office for Victims of Crime"}) RETURN g
+
+MATCH (f:Filing)-[]->(r:Registrant) RETURN r.name, count(f), sum(f.amount) ORDER BY count(f) DESC
+
+MATCH (f:Filing)-[]->(i:Issue) RETURN i.code, count(f), sum (f.amount) ORDER BY count(f) DESC
+
+MATCH (n:Client)-[:FILED]->(m:Filing) RETURN n.name, COUNT(m) ORDER BY COUNT(m) DESC
+
+MATCH (n:Client)-[:FILED]->(m:Filing)-[:ISSUE]-(i:Issue) RETURN n.name, i.code, count(m) order by count(m) DESC
+
+MATCH (n:Client)-[:FILED]->(m:Filing)-[:ISSUE]-(i:Issue) RETURN i.code, n.name, count(m) order by i.code, count(m) DESC
+
+
+MATCH (c:Client) RETURN COUNT(c)
+
+MATCH (c:Client)-[:FILED]->(f:Filing) RETURN c.name, COUNT(f) ORDER BY COUNT(f) DESC
+
+MATCH (c:Client)-[:FILED]->(f:Filing)-[:LOBBIED_BY]->(l:Lobbyist) RETURN c.name, f.filingId, COUNT(l) ORDER BY c.name, count(l) DESC
+
+MATCH (c:Client)-[:FILED]->(f:Filing)-[:LOBBIED_BY]->(l:Lobbyist) WITH c, f, COUNT(l) as qty RETURN c.name, COUNT(f), AVG(qty) ORDER BY c.name
+
+MATCH (g1:GovernmentEntity)<-[:LOBBYING]-(f1:Filing)-[:LOBBYING]->(g2:GovernmentEntity) RETURN g1.name, g2.name, COUNT(f1) ORDER BY COUNT(f1) DESC, g1.name, g2.name
+
+MATCH (c:Client)-[:FILED]->(f:Filing)-[:LOBBYING]->(g:GovernmentEntity) WITH c, f, g ORDER BY g.name WITH c, f, COLLECT(g.name) AS Names RETURN c.name, Names, COUNT(f), SUM(f.amount) ORDER BY c.name, Names
+
+
+MATCH (c:Client)<-[:ON_BEHALF_OF]-(f:Filing)-[:TARGETED_AT]->(g:GovernmentEntity) WITH c, f, g ORDER BY g.name WITH c, f, COLLECT(g.name) AS Names RETURN c.name, Names, COUNT(f), SUM(f.amount) ORDER BY count(f) DESC
+
+

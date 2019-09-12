@@ -1,0 +1,94 @@
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            version="1.00">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
+
+    <xsd:simpleType name="coveredEnum">
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="COVERED"/>
+            <xsd:enumeration value="NOT COVERED"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:complexType name="clientType">
+        <xsd:attribute name="ClientName" type="xsd:string"/>
+        <xsd:attribute name="GeneralDescription" type="xsd:string" use="optional"/>
+        <xsd:attribute name="ClientID" type="xsd:long"/>
+        <xsd:attribute name="SelfFiler" type="xsd:string"/>
+        <xsd:attribute name="ContactFullname" type="xsd:string"/>
+        <xsd:attribute name="IsStateOrLocalGov" type="xsd:string"/>
+        <xsd:attribute name="ClientCountry" type="xsd:string"/>
+        <xsd:attribute name="ClientPPBCountry" type="xsd:string"/>
+        <xsd:attribute name="ClientState" type="xsd:string" use="optional"/>
+        <xsd:attribute name="ClientPPBState" type="xsd:string" use="optional"/>
+    </xsd:complexType>
+
+    <xsd:complexType name="filingType">
+        <xsd:sequence>
+            <xsd:element name="Registrant" type="registrantType"/>
+            <xsd:element name="Client" type="clientType"/>
+            <xsd:element name="Lobbyists" type="lobbyistsType"/>
+            <xsd:element name="GovernmentEntities" type="governmentEntitiesType"/>
+            <xsd:element name="Issues" type="issuesType"/>
+        </xsd:sequence>
+        <xsd:attribute name="ID" type="xsd:string"/>
+        <xsd:attribute name="Year" type="xsd:short"/>
+        <xsd:attribute name="Received" type="xsd:dateTime"/>
+        <xsd:attribute name="Amount" type="xsd:string" use="optional"/>
+        <xsd:attribute name="Type" type="xsd:string"/>
+        <xsd:attribute name="Period" type="xsd:string"/>
+    </xsd:complexType>
+
+    <xsd:complexType name="governmentEntityType">
+        <xsd:attribute name="GovEntityName" type="xsd:string"/>
+    </xsd:complexType>
+
+    <xsd:complexType name="governmentEntitiesType">
+        <xsd:sequence>
+            <xsd:element name="GovernmentEntity" type="governmentEntityType" minOccurs="1" maxOccurs="unbounded"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="issueType">
+        <xsd:attribute name="Code" type="xsd:string"/>
+        <xsd:attribute name="SpecificIssue" type="xsd:string"/>
+    </xsd:complexType>
+
+    <xsd:complexType name="issuesType">
+        <xsd:sequence>
+            <xsd:element name="Issue" type="issueType" minOccurs="1" maxOccurs="unbounded"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="lobbyistType">
+        <xsd:attribute name="LobbyistName" type="xsd:string"/>
+        <xsd:attribute name="LobbyistCoveredGovPositionIndicator" type="coveredEnum"/>
+        <xsd:attribute name="OfficialPosition" type="xsd:string" use="optional"/>
+        <xsd:attribute name="ActivityInformation" type="xsd:string"/>
+    </xsd:complexType>
+
+    <xsd:complexType name="lobbyistsType">
+        <xsd:sequence>
+            <xsd:element name="Lobbyist" type="lobbyistType" minOccurs="1" maxOccurs="unbounded"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="registrantType">
+        <xsd:attribute name="RegistrantID" type="xsd:long"/>
+        <xsd:attribute name="RegistrantName" type="xsd:string"/>
+        <xsd:attribute name="GeneralDescription" type="xsd:string" use="optional"/>
+        <xsd:attribute name="Address" type="xsd:string"/>
+        <xsd:attribute name="RegistrantCountry" type="xsd:string"/>
+        <xsd:attribute name="RegistrantPPBCountry" type="xsd:string" use="optional"/>
+    </xsd:complexType>
+
+
+    <xsd:element name="PublicFilings">
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element name="Filing" type="filingType" minOccurs="1" maxOccurs="unbounded"/>
+            </xsd:sequence>
+        </xsd:complexType>
+    </xsd:element>
+
+</xsd:schema>
+
