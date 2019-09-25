@@ -6,9 +6,7 @@ package com.buddhadata.sandbox.neo4j.filings.node;
 
 import org.neo4j.ogm.annotation.*;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 /**
  * Node representing the overall filing
@@ -68,13 +66,16 @@ public class Filing {
      * Government entities for whom the lobbying to directed
      */
     @Relationship(type = "TARGETED_AT")
-    private List<GovernmentEntity> entities;
+    private Set<GovernmentEntity> entities;
+
+    @Relationship("ABOUT")
+    private Set<Issue> issues;
 
     /**
      * The specific lobbyists identified by the filing
      */
     @Relationship(type = "LOBBYING_FOR", direction="INCOMING")
-    private List<Lobbyist> lobbyists;
+    private Set<Lobbyist> lobbyists;
 
     /**
      * The registered entity for whom the filing was made
@@ -107,8 +108,9 @@ public class Filing {
         this.type = normalizeString (type);
         this.period = normalizeString (period);
         this.client = client;
-        this.entities = new ArrayList<>();
-        this.lobbyists = new ArrayList<>();
+        this.entities = new HashSet<>();
+        this.issues = new HashSet<>();
+        this.lobbyists = new HashSet<>();
     }
 
     /**
@@ -255,11 +257,13 @@ public class Filing {
         this.registrant = registrant;
     }
 
-    public List<GovernmentEntity> getEntities() {
+    public Set<GovernmentEntity> getEntities() {
         return entities;
     }
 
-    public List<Lobbyist> getLobbyists() {
+    public Set<Issue> getIssues() { return issues; }
+
+    public Set<Lobbyist> getLobbyists() {
         return lobbyists;
     }
 
