@@ -101,6 +101,8 @@ public class Filing {
                    final String period,
                    final Client client) {
 
+        this();
+
         this.filingId = normalizeString (filingId);
         this.year = year;
         this.receivedOn = receivedOn;
@@ -108,6 +110,12 @@ public class Filing {
         this.type = normalizeString (type);
         this.period = normalizeString (period);
         this.client = client;
+    }
+
+    /**
+     * Default constructor
+     */
+    public Filing () {
         this.entities = new HashSet<>();
         this.issues = new HashSet<>();
         this.lobbyists = new HashSet<>();

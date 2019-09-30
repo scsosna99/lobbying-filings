@@ -75,11 +75,18 @@ public class Lobbyist {
                     final String govtPositionDesc,
                     final String activityInfo) {
 
+        this();
         this.firstName = normalizeString(firstName);
         this.surname = normalizeString(surname);
         this.govtPositionInd = (covered == CoveredEnum.COVERED);
         this.govtPositionDesc = normalizeString(govtPositionDesc);
         this.activityInfo = normalizeString(activityInfo);
+    }
+
+    /**
+     * Default constructor
+     */
+    public Lobbyist() {
         this.employers = new HashSet<>();
     }
 

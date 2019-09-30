@@ -83,12 +83,19 @@ public class Registrant
                       final String country,
                       final String countryPBB) {
 
+        this();
         this.registrantId = registrantId;
         this.name = normalizeString (name);
         this.description = normalizeString (description);
         this.address = normalizeString (address);
         this.country = normalizeString(country);
         this.countryPBB = normalizeString (countryPBB);
+    }
+
+    /**
+     * Default constructor
+     */
+    public Registrant() {
         this.clients = new HashSet<>();
     }
 

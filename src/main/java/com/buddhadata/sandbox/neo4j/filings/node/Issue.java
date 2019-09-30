@@ -40,6 +40,13 @@ public class Issue {
     }
 
     /**
+     * Default constructor
+     */
+    public Issue() {
+        return;
+    }
+
+    /**
      * getter
      * @return internal Neo4J id of the node
      */

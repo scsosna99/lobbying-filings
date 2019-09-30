@@ -40,6 +40,13 @@ public class GovernmentEntity {
     }
 
     /**
+     * Default constructor
+     */
+    public GovernmentEntity() {
+        return;
+    }
+
+    /**
      * getter
      * @return internal Neo4J id of the node
      */

@@ -31,7 +31,7 @@ public class PublicFilingLoader {
     /**
      * Cache for tracking what clients and retrieving from database only when necessary.
      */
-    private LoadingCache<Long,Client> clientCache;
+    private LoadingCache<String,Client> clientCache;
 
     /**
      * Cache for tracking what government entities already exist and retrieving from database only when necessary.
@@ -70,21 +70,21 @@ public class PublicFilingLoader {
     static private final int CONCURRENCY_THREAD_COUNT = 1;
 
     //  Configuration info for connecting to the Neo4J database
-    static private final String SERVER_URI = "bolt://localhost";
+    static private final String SERVER_URI = "bolt://10.10.9.8";
     static private final String SERVER_USERNAME = "neo4j";
     static private final String SERVER_PASSWORD = "password";
 
     //  Client query
     static private final String CLIENT_INDEX = "CREATE INDEX ON :Client (name)";
-    static private final String CLIENT_QUERY = "MATCH (c:Client {clientId:$clientId}) RETURN c";
-    static private final String CLIENT_PARAM_ID = "clientId";
+    static private final String CLIENT_QUERY = "MATCH (c:Client {name:$name}) RETURN c";
+    static private final String CLIENT_PARAM_NAME = "name";
 
     //  Issue query
     static private final String ISSUE_QUERY = "MATCH (i:Issue {code:$code}) RETURN i";
     static private final String ISSUE_PARAM_CODE = "code";
 
     //  Lobbyist Entity query
-    static private final String LOBBYIST_INDEX = "CREATE INDEX ON :LOBBYIST (surname, firstName)";
+    static private final String LOBBYIST_INDEX = "CREATE INDEX ON :Lobbyist (surname, firstName)";
     static private final String LOBBYIST_QUERY = "MATCH (l:Lobbyist {surname:$surname,firstName:$firstName}) RETURN l";
     static private final String LOBBYIST_PARAM_FIRSTNAME = "firstName";
     static private final String LOBBYIST_PARAM_SURNAME = "surname";
@@ -94,6 +94,7 @@ public class PublicFilingLoader {
     static private final String ENTITY_PARAM_NAME = "name";
 
     //  Registrant node query
+    static private final String REGISTRANT_INDEX = "CREATE INDEX ON :Registrant (registrantId)";
     static private final String REGISTRANT_QUERY = "MATCH (reg:Registrant {registrantId:$id}) RETURN reg";
     static private final String REGISTRANT_PARAM_NAME = "id";
 
@@ -109,11 +110,13 @@ public class PublicFilingLoader {
         } catch (JAXBException e) {
             System.out.println ("Exception creating JAXB Context: " + e);
         }
+
         //  Create a session factory and immediately open a session to Neo4J.  We're using a member variable for the session so
         //  we can access it whereever without having to pass it around, which makes using a Guava caching solution possible.
         Configuration configuration = new Configuration.Builder().uri(SERVER_URI).credentials(SERVER_USERNAME, SERVER_PASSWORD).build();
         session = new SessionFactory(configuration, "com.buddhadata.sandbox.neo4j.filings.node", "com.buddhadata.sandbox.neo4j.filings.relationship")
                         .openSession();
+
         //  Get all the caches defined with the appropriate loaders to use during processing
         createCaches();
 
@@ -128,19 +131,19 @@ public class PublicFilingLoader {
 
         //  Create the client cache using Guava.
         clientCache = CacheBuilder.newBuilder()
-                .maximumSize(2500)
+                .maximumSize(1)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
-                    new CacheLoader<Long,Client>() {
-                        public Client load (Long key) {
+                    new CacheLoader<String,Client>() {
+                        public Client load (String key) {
                             return session.queryForObject (Client.class, CLIENT_QUERY,
-                                    Collections.singletonMap(CLIENT_PARAM_ID, key));
+                                    Collections.singletonMap(CLIENT_PARAM_NAME, key));
                         }
                     }
                 );
 
         gentCache = CacheBuilder.newBuilder()
-                .maximumSize(250)
+                .maximumSize(1)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                         new CacheLoader<String,GovernmentEntity>() {
@@ -153,7 +156,7 @@ public class PublicFilingLoader {
                 );
 
         issueCache = CacheBuilder.newBuilder()
-                .maximumSize(250)
+                .maximumSize(01)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                         new CacheLoader<String, Issue>() {
@@ -165,7 +168,7 @@ public class PublicFilingLoader {
                 );
 
         lobbyistCache = CacheBuilder.newBuilder()
-                .maximumSize(2500)
+                .maximumSize(1)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                         new CacheLoader<LobbyistKey, Lobbyist>() {
@@ -183,7 +186,7 @@ public class PublicFilingLoader {
                 );
 
         registrantCache = CacheBuilder.newBuilder()
-                .maximumSize(2500)
+                .maximumSize(1)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                   new CacheLoader<Long,Registrant>() {
@@ -202,8 +205,9 @@ public class PublicFilingLoader {
         try {
             session.query(CLIENT_INDEX, Collections.EMPTY_MAP);
             session.query(LOBBYIST_INDEX, Collections.EMPTY_MAP);
+            session.query(REGISTRANT_INDEX, Collections.EMPTY_MAP);
         } catch (Exception e) {
-            System.out.println ("Error creating client index");
+            System.out.println ("Error creating indicies: " + e);
         }
     }
 
@@ -265,7 +269,6 @@ public class PublicFilingLoader {
 
                         //  Get/create the client
                         Client client = findOrCreateClient(one.getClient());
-                        session.save(client);
 
                         //  Create the filing
                         Filing filing = createFiling(one, client);
@@ -278,7 +281,10 @@ public class PublicFilingLoader {
                         //  Make sure a lobbyist node exists for all lobbyists associated with filing.
                         if (one.getLobbyists() != null && one.getLobbyists().getLobbyist() != null) {
                             for (LobbyistType l : one.getLobbyists().getLobbyist()) {
-                                filing.getLobbyists().add(findOrCreateLobbyist(l, registrant));
+                                Lobbyist lobbyist = findOrCreateLobbyist(l, registrant);
+                                if (lobbyist != null) {
+                                    filing.getLobbyists().add(lobbyist);
+                                }
                             }
                         }
 
@@ -455,8 +461,9 @@ public class PublicFilingLoader {
 
         //  Clients are unique by ID, attempt to find in cache or database
         Client toReturn;
+        String clientName = client.getClientName().trim();
         try {
-            toReturn = clientCache.get(client.getClientID());
+            toReturn = clientCache.get(clientName);
         } catch (Exception e) {
             //  Exception is thrown when the client doesn't exist in either the cache or the database, which
             //  just means that the client needs to be created.
@@ -465,11 +472,11 @@ public class PublicFilingLoader {
 
         //  If client doesn't already exist, create a new one.
         if (toReturn == null) {
-            toReturn = new Client (client.getClientID(), client.getClientName(), client.getGeneralDescription(), client.getContactFullname(),
+            toReturn = new Client (client.getClientID(), clientName, client.getGeneralDescription(), client.getContactFullname(),
                 client.getClientCountry(), client.getClientPPBCountry(), client.getClientState(), client.getClientPPBState(),
                 Boolean.valueOf(client.getSelfFiler()), Boolean.valueOf(client.getIsStateOrLocalGov()));
             session.save (toReturn);
-            clientCache.put(client.getClientID(), toReturn);
+            clientCache.put(clientName, toReturn);
         }
 
 
@@ -484,43 +491,39 @@ public class PublicFilingLoader {
     private Lobbyist findOrCreateLobbyist (LobbyistType lobbyist,
                                            Registrant registrant) {
 
-        //  Lobbyist names are "surname,first" so break them apart by finding ','
+        Lobbyist toReturn = null;
         String name = lobbyist.getLobbyistName().toUpperCase();
-        int comma = name.indexOf(',');
-        String firstName;
-        String surname;
-        if (comma > 0) {
-            surname = name.substring(0, comma).trim();
-            firstName = name.substring(comma + 1).trim();
-        } else {
-            surname = name.trim();
-            firstName = "";
+
+        //  Possible that no lobbyist name provided, in which case there's no work to do.
+        if (!name.isEmpty()) {
+
+            //  Lobbyist names are "surname,first" so break them apart by finding ','
+            int comma = name.indexOf(',');
+            String firstName = name.substring(comma + 1).trim();
+            String surname = name.substring(0, comma).trim();
+            LobbyistKey key = new LobbyistKey(firstName, surname);
+
+            //  Look in the cache and see if the client already exists
+            try {
+                toReturn = lobbyistCache.get(key);
+            } catch (Exception e) {
+                //  Exception most likely thrown because the lobbyist wasn't found in cache or database, which just
+                //  means it'll need to be created.
+                toReturn = null;
+            }
+
+            //  If lobbyist doesn't already exist, create a new one.
+            if (toReturn == null) {
+                toReturn = new Lobbyist(firstName, surname, lobbyist.getLobbyistCoveredGovPositionIndicator(),
+                        lobbyist.getOfficialPosition(), lobbyist.getActivityInformation());
+                session.save(toReturn);
+                lobbyistCache.put(key, toReturn);
+            }
+
+            //  Add the registrant to the set of all registrants who employ the lobbyist.  As a set, can just do a put
+            //  and don't need to check whether it's already there.  Then save the lobbyist
+            toReturn.getEmployers().add(registrant);
         }
-        LobbyistKey key = new LobbyistKey(firstName, surname);
-
-
-        //  Look in the cache and see if the client already exists
-        Lobbyist toReturn;
-        try {
-            toReturn = lobbyistCache.get(key);
-        } catch (Exception e) {
-            //  Exception most likely thrown because the lobbyist wasn't found in cache or database, which just
-            //  means it'll need to be created.
-            toReturn = null;
-        }
-
-        //  If lobbyist doesn't already exist, create a new one.
-        if (toReturn == null) {
-            toReturn = new Lobbyist(firstName, surname, lobbyist.getLobbyistCoveredGovPositionIndicator(),
-                lobbyist.getOfficialPosition(), lobbyist.getActivityInformation());
-            lobbyistCache.put(key, toReturn);
-        }
-
-        //  Add the registrant to the set of all registrants who employ the lobbyist.  As a set, can just do a put
-        //  and don't need to check whether it's already there.  Then save the lobbyist
-        toReturn.getEmployers().add(registrant);
-        session.save (toReturn);
-
 
         return toReturn;
     }
@@ -606,12 +609,12 @@ public class PublicFilingLoader {
                     registrant.getAddress(), registrant.getRegistrantCountry(), registrant.getRegistrantPPBCountry());
             toReturn.getClients().add(client);
             registrantCache.put(registrant.getRegistrantID(), toReturn);
+            session.save(toReturn);
         }
 
         //  Add the client to the set who employ the registrant.  Because it's a set, no need to check for existance,
         //  just put and then save.
         toReturn.getClients().add(client);
-        session.save(toReturn);
 
 
         return toReturn;

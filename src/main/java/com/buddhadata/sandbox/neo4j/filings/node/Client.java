@@ -37,7 +37,7 @@ public class Client {
     private Long id;
 
     /**
-     * government-issued unique identifier
+     * government-issued identifier, should be unique BUT ISN'T!
      */
     @Property
     private long clientId;
@@ -118,6 +118,13 @@ public class Client {
         this.statePBB = normalizeString (statePBB);
         this.selfFilerInd = selfFilerInd;
         this.stateLocalGovtInd = stateLocalGovtInd;
+    }
+
+    /**
+     * Default constructor
+     */
+    public Client () {
+        return;
     }
 
     /**
