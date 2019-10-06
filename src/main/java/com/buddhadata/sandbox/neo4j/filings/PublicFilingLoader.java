@@ -10,6 +10,9 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import generated.*;
 import org.neo4j.ogm.config.Configuration;
+import org.neo4j.ogm.context.MappedRelationship;
+import org.neo4j.ogm.context.MappingContext;
+import org.neo4j.ogm.session.Neo4jSession;
 import org.neo4j.ogm.session.Session;
 import org.neo4j.ogm.session.SessionFactory;
 import org.neo4j.ogm.transaction.Transaction;
@@ -18,6 +21,8 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
 import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -70,7 +75,7 @@ public class PublicFilingLoader {
     static private final int CONCURRENCY_THREAD_COUNT = 1;
 
     //  Configuration info for connecting to the Neo4J database
-    static private final String SERVER_URI = "bolt://10.10.9.8";
+    static private final String SERVER_URI = "bolt://127.0.0.1";
     static private final String SERVER_USERNAME = "neo4j";
     static private final String SERVER_PASSWORD = "password";
 
@@ -131,7 +136,7 @@ public class PublicFilingLoader {
 
         //  Create the client cache using Guava.
         clientCache = CacheBuilder.newBuilder()
-                .maximumSize(1)
+                .maximumSize(250)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                     new CacheLoader<String,Client>() {
@@ -143,7 +148,7 @@ public class PublicFilingLoader {
                 );
 
         gentCache = CacheBuilder.newBuilder()
-                .maximumSize(1)
+                .maximumSize(250)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                         new CacheLoader<String,GovernmentEntity>() {
@@ -156,7 +161,7 @@ public class PublicFilingLoader {
                 );
 
         issueCache = CacheBuilder.newBuilder()
-                .maximumSize(01)
+                .maximumSize(250)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                         new CacheLoader<String, Issue>() {
@@ -168,7 +173,7 @@ public class PublicFilingLoader {
                 );
 
         lobbyistCache = CacheBuilder.newBuilder()
-                .maximumSize(1)
+                .maximumSize(250)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                         new CacheLoader<LobbyistKey, Lobbyist>() {
@@ -186,7 +191,7 @@ public class PublicFilingLoader {
                 );
 
         registrantCache = CacheBuilder.newBuilder()
-                .maximumSize(1)
+                .maximumSize(250)
                 .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
                 .build(
                   new CacheLoader<Long,Registrant>() {
@@ -225,6 +230,10 @@ public class PublicFilingLoader {
         //  processFilings (getPublicFilings (new File("/Users/scsosna/data/src/github/opendata-neo4j/filings/src/main/resources/data/2018_2_4_8.xml")), "2018_2_4_8.xml");
 
         //  Process the files of interest
+        processZipFile("2015_1.zip");
+        processZipFile("2015_2.zip");
+        processZipFile("2015_3.zip");
+        processZipFile("2015_4.zip");
         processZipFile("2016_1.zip");
         processZipFile("2016_2.zip");
         processZipFile("2016_3.zip");
@@ -251,14 +260,17 @@ public class PublicFilingLoader {
 
         if (filings != null) {
             try {
+                //  Uncomment this if you want to see logging information on internal MappingContext collection
+                //queryClearMappingContext(false, false);
+
                 System.out.print("Processing " + sourceName + ": ");
                 long start = System.currentTimeMillis();
 
-                //  Clearing out the session between filings dramatically improves performance, removing unnecessary
-                //  classes from an internal map that just makes life miserable!
-                session.clear();
-
                 for (FilingType one : filings.getFiling()) {
+
+                    //  Clearing out the session between filings dramatically improves performance, removing unnecessary
+                    //  classes from an internal map that just makes life miserable!
+                    session.clear();
 
                     //  Filings with no amount specified are those filed indicating no lobbying activty
                     //  by the registrant in the current quarter
@@ -618,6 +630,38 @@ public class PublicFilingLoader {
 
 
         return toReturn;
+    }
+    /**
+     * Dump statistics of interest
+     */
+    private void queryClearMappingContext (boolean clearNodes,
+                                           boolean clearRelationships) {
+
+        //  Get the session implementation
+        Neo4jSession nsession = (Neo4jSession) session;
+
+        //  The MappingContext stored within the session contains maps of nodes and relationships.
+        MappingContext context = nsession.context();
+
+        try {
+            //  Make the internal maps of the sessions MappingContext are acccessible
+            Field field = MappingContext.class.getDeclaredField("nodeEntityRegister");
+            field.setAccessible(true);
+            Map<Long, Object> nodeEntityRegister = (Map<Long, Object>) field.get(context);
+            field = MappingContext.class.getDeclaredField("relationshipRegister");
+            field.setAccessible(true);
+            Set<MappedRelationship> relationshipEntityRegister = (Set<MappedRelationship>) field.get(context);
+
+            //  Print the sizes of the node and relationship maps.
+            System.out.println ("MappingContext size: nodes=" + nodeEntityRegister.size() + ", relationships=" + relationshipEntityRegister.size());
+
+            //  Clear internal structures if requested.
+            if (clearNodes) nodeEntityRegister.clear();
+            if (clearRelationships) relationshipEntityRegister.clear();
+        } catch (Exception e) {
+            //  We're trying to go through the backdoor but something bad happened.
+            System.out.println ("Reflection Exception: " + e);
+        }
     }
 
     /**
