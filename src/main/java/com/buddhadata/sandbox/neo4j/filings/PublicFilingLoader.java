@@ -331,10 +331,8 @@ public class PublicFilingLoader {
                 //  Process all the files (zip entries) within the zip file (zip input stream)
                 ZipEntry ze = null;
                 while ((ze = zis.getNextEntry()) != null) {
-                    long start = System.currentTimeMillis();
-
                     //  Unmarshall the XML document into objects that are easier to work with.
-                    PublicFilings filings = getPublicFilings(zis, ze);
+                    PublicFilings filings = getPublicFilings(zis);
 
                     //  Process
                     processFilings(filings, ze.getName());
@@ -370,32 +368,20 @@ public class PublicFilingLoader {
     /**
      * Unmarshall the filings data from the original XML
      * @param zis the stream from which each entry is read
-     * @param ze the zip file entry containing important information about the zip'ed file
      * @return PublicFilings object with 1 or more filings
      */
-    private PublicFilings getPublicFilings (ZipInputStream zis,
-                                            ZipEntry ze) {
+    private PublicFilings getPublicFilings (ZipInputStream zis) {
 
-        PublicFilings toReturn = null;
         try {
-            //  First, read the bytes for this zip entry.
-            byte[] bytes = new byte[(int) ze.getSize() + 2048];
-            int offset = 0;
-            int read = 0;
-            while ((read = zis.read(bytes, offset, 2048)) >= 0) {
-                offset += read;
-            }
 
-            //  Create a reader to stream the bytes and deserialize the XML.
-            try (Reader rdr = new InputStreamReader (new ByteArrayInputStream(bytes, 0, offset), Charset.forName("UTF-16"))) {
-                toReturn = (PublicFilings) unmarshaller.unmarshal(rdr);
-            }
+            return (PublicFilings) unmarshaller.unmarshal(new FilterInputStream(zis) {
+                @Override public void close() {
+                }
+            });
         } catch (Exception e) {
             System.out.println ("Exception while unmarshalling: " + e);
         }
-
-
-        return toReturn;
+        return null;
     }
 
     /**
