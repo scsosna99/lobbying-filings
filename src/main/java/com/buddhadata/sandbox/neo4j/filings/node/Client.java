@@ -4,10 +4,9 @@
 
 package com.buddhadata.sandbox.neo4j.filings.node;
 
-import org.neo4j.ogm.annotation.*;
+import java.util.Objects;
 
-import java.util.ArrayList;
-import java.util.List;
+import org.neo4j.ogm.annotation.*;
 
 /**
  * Node representing a client who's lobbying (lobbying done by a registrant
@@ -28,13 +27,6 @@ public class Client {
      */
     @Property
     private boolean stateLocalGovtInd;
-
-    /**
-     * Internal Neo4J id of the node
-     */
-    @Id
-    @GeneratedValue
-    private Long id;
 
     /**
      * government-issued identifier, should be unique BUT ISN'T!
@@ -69,6 +61,7 @@ public class Client {
     /**
      * Client name
      */
+    @Id
     @Property
     private String name;
 
@@ -120,11 +113,11 @@ public class Client {
         this.stateLocalGovtInd = stateLocalGovtInd;
     }
 
-    /**
-     * Default constructor
-     */
-    public Client () {
-        return;
+    Client() {
+    }
+
+    public Client(String name) {
+        this.name = name;
     }
 
     /**
@@ -157,22 +150,6 @@ public class Client {
      */
     public void setStateLocalGovtInd(boolean stateLocalGovtInd) {
         this.stateLocalGovtInd = stateLocalGovtInd;
-    }
-
-    /**
-     * getter
-     * @return internal Neo4J id of the node
-     */
-    public Long getId() {
-        return id;
-    }
-
-    /**
-     * setter
-     * @param id Neo4J-assigned node id
-     */
-    public void setId(Long id) {
-        this.id = id;
     }
 
     /**
@@ -264,14 +241,6 @@ public class Client {
     }
 
     /**
-     * setter
-     * @param name client's name
-     */
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    /**
      * getter
      * @return client's state, when applicable
      */
@@ -305,23 +274,17 @@ public class Client {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
+        if (this == o)
+            return true;
+        if (!(o instanceof Client))
+            return false;
         Client client = (Client) o;
-
-        if (clientId != client.clientId) return false;
-        return name != null ? name.equals(client.name) : client.name == null;
-
+        return name.equals(client.name);
     }
 
-    @Override
-    public int hashCode() {
-        int result = (int) (clientId ^ (clientId >>> 32));
-        result = 31 * result + (name != null ? name.hashCode() : 0);
-        return result;
+    @Override public int hashCode() {
+        return Objects.hash(name);
     }
-
 
     /**
      * Normalize the string data provided in the source data file

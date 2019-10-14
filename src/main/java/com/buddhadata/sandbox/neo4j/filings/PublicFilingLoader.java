@@ -119,9 +119,6 @@ public class PublicFilingLoader {
 
         //  Get all the caches defined with the appropriate loaders to use during processing
         createCaches();
-
-        //  Indices on a few nodes should help querying existing nodes when reusing between filings.
-        createIndices();
     }
 
     /**
@@ -232,6 +229,7 @@ public class PublicFilingLoader {
 
         //  Always clean up by purging the database.
         purgeDatabase();
+        //  Indices on a few nodes should help querying existing nodes when reusing between filings.
         createIndices();
 
         //  If you want to process individual files, do this.

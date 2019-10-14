@@ -7,6 +7,7 @@ package com.buddhadata.sandbox.neo4j.filings.node;
 import org.neo4j.ogm.annotation.*;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -17,13 +18,6 @@ import java.util.Set;
 @NodeEntity
 public class Registrant
     implements Comparable<Registrant> {
-
-    /**
-     * Internal Neo4J id of the node
-     */
-    @Id
-    @GeneratedValue
-    private Long id;
 
     /**
      * Registrant's address
@@ -58,6 +52,7 @@ public class Registrant
     /**
      * government-generated ID of registrant
      */
+    @Id
     @Property
     private long registrantId;
 
@@ -65,7 +60,7 @@ public class Registrant
      * The clients which have engaged (hired) this registrant/lobbying firm
      */
     @Relationship(type="ENGAGES", direction="INCOMING")
-    private Set<Client> clients;
+    private Set<Client> clients = new HashSet<>();
 
     /**
      * Constructor
@@ -83,7 +78,6 @@ public class Registrant
                       final String country,
                       final String countryPBB) {
 
-        this();
         this.registrantId = registrantId;
         this.name = normalizeString (name);
         this.description = normalizeString (description);
@@ -95,24 +89,7 @@ public class Registrant
     /**
      * Default constructor
      */
-    public Registrant() {
-        this.clients = new HashSet<>();
-    }
-
-    /**
-     * getter
-     * @return internal Neo4J id of the node
-     */
-    public Long getId() {
-        return id;
-    }
-
-    /**
-     * setter
-     * @param id internal Neo4J id of the node
-     */
-    public void setId(Long id) {
-        this.id = id;
+    Registrant() {
     }
 
     /**
@@ -234,6 +211,19 @@ public class Registrant
      */
     public int compareTo (Registrant other) {
         return getName().compareTo(other.getName());
+    }
+
+    @Override public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (!(o instanceof Registrant))
+            return false;
+        Registrant that = (Registrant) o;
+        return registrantId == that.registrantId;
+    }
+
+    @Override public int hashCode() {
+        return Objects.hash(registrantId);
     }
 
     /**

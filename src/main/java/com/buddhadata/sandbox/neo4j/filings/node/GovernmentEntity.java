@@ -4,7 +4,8 @@
 
 package com.buddhadata.sandbox.neo4j.filings.node;
 
-import org.neo4j.ogm.annotation.GeneratedValue;
+import java.util.Objects;
+
 import org.neo4j.ogm.annotation.Id;
 import org.neo4j.ogm.annotation.NodeEntity;
 import org.neo4j.ogm.annotation.Property;
@@ -18,15 +19,9 @@ import org.neo4j.ogm.annotation.Property;
 public class GovernmentEntity {
 
     /**
-     * Internal Neo4J id of the node
-     */
-    @Id
-    @GeneratedValue
-    private Long id;
-
-    /**
      * Registrant name
      */
+    @Id
     @Property
     private String name;
 
@@ -42,24 +37,7 @@ public class GovernmentEntity {
     /**
      * Default constructor
      */
-    public GovernmentEntity() {
-        return;
-    }
-
-    /**
-     * getter
-     * @return internal Neo4J id of the node
-     */
-    public Long getId() {
-        return id;
-    }
-
-    /**
-     * setter
-     * @param id internal Neo4J id of the node
-     */
-    public void setId(Long id) {
-        this.id = id;
+    GovernmentEntity() {
     }
 
     /**
@@ -85,5 +63,18 @@ public class GovernmentEntity {
      */
     private String normalizeString (String original) {
         return (original != null && !original.isEmpty()) ? original.trim().replace("\r\n", ", ").replace("\n", "  ") : null;
+    }
+
+    @Override public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (!(o instanceof GovernmentEntity))
+            return false;
+        GovernmentEntity that = (GovernmentEntity) o;
+        return name.equals(that.name);
+    }
+
+    @Override public int hashCode() {
+        return Objects.hash(name);
     }
 }
