@@ -6,6 +6,7 @@ package com.buddhadata.sandbox.neo4j.filings.node;
 
 import org.neo4j.ogm.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -27,7 +28,7 @@ public class Filing {
      * Date on which the filing was received.
      */
     @Property
-    private Date receivedOn;
+    private LocalDateTime receivedOn;
 
     /**
      * The dollar amount of the filing.
@@ -95,7 +96,7 @@ public class Filing {
      */
     public Filing (final String filingId,
                    final int year,
-                   final Date receivedOn,
+                   final LocalDateTime receivedOn,
                    final int amount,
                    final String type,
                    final String period,
@@ -141,7 +142,7 @@ public class Filing {
      * getter
      * @return date on which the filing was received
      */
-    public Date getReceivedOn() {
+    public LocalDateTime getReceivedOn() {
         return receivedOn;
     }
 
@@ -149,7 +150,7 @@ public class Filing {
      * setter
      * @param receivedOn date on which the filing was received
      */
-    public void setReceivedOn(Date receivedOn) {
+    public void setReceivedOn(LocalDateTime receivedOn) {
         this.receivedOn = receivedOn;
     }
 

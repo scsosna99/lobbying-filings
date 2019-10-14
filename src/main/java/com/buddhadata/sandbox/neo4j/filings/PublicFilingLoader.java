@@ -19,8 +19,11 @@ import org.neo4j.ogm.transaction.Transaction;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
+import javax.xml.datatype.XMLGregorianCalendar;
+
 import java.io.*;
 import java.nio.charset.Charset;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -114,7 +117,11 @@ public class PublicFilingLoader {
         }
 
         //  Create a session factory
-        Configuration configuration = new Configuration.Builder().uri(SERVER_URI).credentials(SERVER_USERNAME, SERVER_PASSWORD).build();
+        Configuration configuration = new Configuration.Builder()
+            .uri(SERVER_URI)
+            .credentials(SERVER_USERNAME, SERVER_PASSWORD)
+            .useNativeTypes()
+            .build();
         sessionFactory = new SessionFactory(configuration, "com.buddhadata.sandbox.neo4j.filings.node", "com.buddhadata.sandbox.neo4j.filings.relationship");
 
         //  Get all the caches defined with the appropriate loaders to use during processing
@@ -434,7 +441,9 @@ public class PublicFilingLoader {
     private Filing createFiling (FilingType ft, Client client) {
 
         String amount = ft.getAmount();
-        Filing toReturn = new Filing (ft.getID(), ft.getYear(), ft.getReceived().toGregorianCalendar().getTime(),
+        XMLGregorianCalendar c = ft.getReceived();
+        LocalDateTime receivedOn = LocalDateTime.of(c.getYear(), c.getMonth(), c.getDay(), c.getHour(), c.getMinute(), c.getSecond());
+        Filing toReturn = new Filing (ft.getID(), ft.getYear(), receivedOn,
             Integer.valueOf(amount), ft.getType(), ft.getPeriod(), client);
         return toReturn;
     }
