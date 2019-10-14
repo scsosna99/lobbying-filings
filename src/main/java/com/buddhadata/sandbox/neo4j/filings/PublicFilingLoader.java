@@ -9,10 +9,9 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import generated.*;
+
+import org.neo4j.driver.Driver;
 import org.neo4j.ogm.config.Configuration;
-import org.neo4j.ogm.context.MappedRelationship;
-import org.neo4j.ogm.context.MappingContext;
-import org.neo4j.ogm.session.Neo4jSession;
 import org.neo4j.ogm.session.Session;
 import org.neo4j.ogm.session.SessionFactory;
 import org.neo4j.ogm.transaction.Transaction;
@@ -21,8 +20,6 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
 import java.io.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -59,10 +56,10 @@ public class PublicFilingLoader {
     private LoadingCache<Long, Registrant> registrantCache;
 
     /**
-     * Neo4J session for the entire processing.  It's a member variable to allow easy access to it from whereever, in
+     * Neo4J session factory for the entire processing.  It's a member variable to allow easy access to it from whereever, in
      * particular when using the Guava caching to retrieve values.
      */
-    private final Session session;
+    private final SessionFactory sessionFactory;
 
     /**
      * Unmarshaller to use.  Unmarshallers are not thread-safe but we are single-threaded here
@@ -77,7 +74,7 @@ public class PublicFilingLoader {
     //  Configuration info for connecting to the Neo4J database
     static private final String SERVER_URI = "bolt://127.0.0.1";
     static private final String SERVER_USERNAME = "neo4j";
-    static private final String SERVER_PASSWORD = "password";
+    static private final String SERVER_PASSWORD = "benchmark";
 
     //  Client query
     static private final String CLIENT_INDEX = "CREATE INDEX ON :Client (name)";
@@ -116,11 +113,9 @@ public class PublicFilingLoader {
             System.out.println ("Exception creating JAXB Context: " + e);
         }
 
-        //  Create a session factory and immediately open a session to Neo4J.  We're using a member variable for the session so
-        //  we can access it whereever without having to pass it around, which makes using a Guava caching solution possible.
+        //  Create a session factory
         Configuration configuration = new Configuration.Builder().uri(SERVER_URI).credentials(SERVER_USERNAME, SERVER_PASSWORD).build();
-        session = new SessionFactory(configuration, "com.buddhadata.sandbox.neo4j.filings.node", "com.buddhadata.sandbox.neo4j.filings.relationship")
-                        .openSession();
+        sessionFactory = new SessionFactory(configuration, "com.buddhadata.sandbox.neo4j.filings.node", "com.buddhadata.sandbox.neo4j.filings.relationship");
 
         //  Get all the caches defined with the appropriate loaders to use during processing
         createCaches();
@@ -141,7 +136,7 @@ public class PublicFilingLoader {
                 .build(
                     new CacheLoader<String,Client>() {
                         public Client load (String key) {
-                            return session.queryForObject (Client.class, CLIENT_QUERY,
+                            return sessionFactory.openSession().queryForObject (Client.class, CLIENT_QUERY,
                                     Collections.singletonMap(CLIENT_PARAM_NAME, key));
                         }
                     }
@@ -153,7 +148,7 @@ public class PublicFilingLoader {
                 .build(
                         new CacheLoader<String,GovernmentEntity>() {
                             public GovernmentEntity load (String key) {
-                                return session.queryForObject (GovernmentEntity.class, ENTITY_QUERY,
+                                return sessionFactory.openSession().queryForObject (GovernmentEntity.class, ENTITY_QUERY,
                                         Collections.singletonMap(ENTITY_PARAM_NAME, key));
 
                             }
@@ -166,7 +161,7 @@ public class PublicFilingLoader {
                 .build(
                         new CacheLoader<String, Issue>() {
                             public Issue load (String key) {
-                                return session.queryForObject (Issue.class, ISSUE_QUERY,
+                                return sessionFactory.openSession().queryForObject (Issue.class, ISSUE_QUERY,
                                         Collections.singletonMap(ISSUE_PARAM_CODE, key));
                             }
                         }
@@ -185,7 +180,7 @@ public class PublicFilingLoader {
                                 params.put (LOBBYIST_PARAM_FIRSTNAME, key.getFirstName());
 
                                 //  Execute query and hope for the best
-                                return session.queryForObject (Lobbyist.class, LOBBYIST_QUERY, params);
+                                return sessionFactory.openSession().queryForObject (Lobbyist.class, LOBBYIST_QUERY, params);
                             }
                         }
                 );
@@ -196,11 +191,22 @@ public class PublicFilingLoader {
                 .build(
                   new CacheLoader<Long,Registrant>() {
                       public Registrant load (Long key) {
-                          return session.queryForObject (Registrant.class, REGISTRANT_QUERY,
+                          return sessionFactory.openSession().queryForObject (Registrant.class, REGISTRANT_QUERY,
                                   Collections.singletonMap(REGISTRANT_PARAM_NAME, key));
                       }
                   }
                 );
+    }
+
+    private void purgeDatabase () {
+        try {
+            Driver driver = sessionFactory.unwrap(Driver.class);
+            try(org.neo4j.driver.Session session = driver.session()) {
+                session.run("MATCH (n) DETACH DELETE n");
+            }
+        } catch (Exception e) {
+            System.out.println ("Error creating purging database: " + e);
+        }
     }
 
     /**
@@ -208,9 +214,12 @@ public class PublicFilingLoader {
      */
     private void createIndices () {
         try {
-            session.query(CLIENT_INDEX, Collections.EMPTY_MAP);
-            session.query(LOBBYIST_INDEX, Collections.EMPTY_MAP);
-            session.query(REGISTRANT_INDEX, Collections.EMPTY_MAP);
+            Driver driver = sessionFactory.unwrap(Driver.class);
+            try(org.neo4j.driver.Session session = driver.session()) {
+                session.run(CLIENT_INDEX);
+                session.run(LOBBYIST_INDEX);
+                session.run(REGISTRANT_INDEX);
+            }
         } catch (Exception e) {
             System.out.println ("Error creating indicies: " + e);
         }
@@ -222,7 +231,7 @@ public class PublicFilingLoader {
     private void process () {
 
         //  Always clean up by purging the database.
-        session.purgeDatabase();
+        purgeDatabase();
         createIndices();
 
         //  If you want to process individual files, do this.
@@ -268,9 +277,7 @@ public class PublicFilingLoader {
 
                 for (FilingType one : filings.getFiling()) {
 
-                    //  Clearing out the session between filings dramatically improves performance, removing unnecessary
-                    //  classes from an internal map that just makes life miserable!
-                    session.clear();
+                    Session session = sessionFactory.openSession();
 
                     //  Filings with no amount specified are those filed indicating no lobbying activty
                     //  by the registrant in the current quarter
@@ -454,13 +461,11 @@ public class PublicFilingLoader {
      * @param client for whom the filing was made
      * @return newly-created <code>Filing</code>
      */
-    private Filing createFiling (FilingType ft,
-                                 Client client) {
+    private Filing createFiling (FilingType ft, Client client) {
 
         String amount = ft.getAmount();
         Filing toReturn = new Filing (ft.getID(), ft.getYear(), ft.getReceived().toGregorianCalendar().getTime(),
-                Integer.valueOf(amount), ft.getType(), ft.getPeriod(), client);
-        session.save(toReturn);
+            Integer.valueOf(amount), ft.getType(), ft.getPeriod(), client);
         return toReturn;
     }
 
@@ -487,7 +492,6 @@ public class PublicFilingLoader {
             toReturn = new Client (client.getClientID(), clientName, client.getGeneralDescription(), client.getContactFullname(),
                 client.getClientCountry(), client.getClientPPBCountry(), client.getClientState(), client.getClientPPBState(),
                 Boolean.valueOf(client.getSelfFiler()), Boolean.valueOf(client.getIsStateOrLocalGov()));
-            session.save (toReturn);
             clientCache.put(clientName, toReturn);
         }
 
@@ -528,7 +532,6 @@ public class PublicFilingLoader {
             if (toReturn == null) {
                 toReturn = new Lobbyist(firstName, surname, lobbyist.getLobbyistCoveredGovPositionIndicator(),
                         lobbyist.getOfficialPosition(), lobbyist.getActivityInformation());
-                session.save(toReturn);
                 lobbyistCache.put(key, toReturn);
             }
 
@@ -560,7 +563,6 @@ public class PublicFilingLoader {
         //  If government entity node doesn't exist, create a new one.
         if (toReturn == null) {
             toReturn = new GovernmentEntity(governmentEntity.getGovEntityName());
-            session.save(toReturn);
             gentCache.put(governmentEntity.getGovEntityName(), toReturn);
         }
 
@@ -588,7 +590,6 @@ public class PublicFilingLoader {
         //  If issue does not already exist, create
         if (toReturn == null) {
             toReturn = new Issue (issueCode);
-            session.save (toReturn);
             issueCache.put(issueCode, toReturn);
         }
 
@@ -621,7 +622,6 @@ public class PublicFilingLoader {
                     registrant.getAddress(), registrant.getRegistrantCountry(), registrant.getRegistrantPPBCountry());
             toReturn.getClients().add(client);
             registrantCache.put(registrant.getRegistrantID(), toReturn);
-            session.save(toReturn);
         }
 
         //  Add the client to the set who employ the registrant.  Because it's a set, no need to check for existance,
@@ -630,38 +630,6 @@ public class PublicFilingLoader {
 
 
         return toReturn;
-    }
-    /**
-     * Dump statistics of interest
-     */
-    private void queryClearMappingContext (boolean clearNodes,
-                                           boolean clearRelationships) {
-
-        //  Get the session implementation
-        Neo4jSession nsession = (Neo4jSession) session;
-
-        //  The MappingContext stored within the session contains maps of nodes and relationships.
-        MappingContext context = nsession.context();
-
-        try {
-            //  Make the internal maps of the sessions MappingContext are acccessible
-            Field field = MappingContext.class.getDeclaredField("nodeEntityRegister");
-            field.setAccessible(true);
-            Map<Long, Object> nodeEntityRegister = (Map<Long, Object>) field.get(context);
-            field = MappingContext.class.getDeclaredField("relationshipRegister");
-            field.setAccessible(true);
-            Set<MappedRelationship> relationshipEntityRegister = (Set<MappedRelationship>) field.get(context);
-
-            //  Print the sizes of the node and relationship maps.
-            System.out.println ("MappingContext size: nodes=" + nodeEntityRegister.size() + ", relationships=" + relationshipEntityRegister.size());
-
-            //  Clear internal structures if requested.
-            if (clearNodes) nodeEntityRegister.clear();
-            if (clearRelationships) relationshipEntityRegister.clear();
-        } catch (Exception e) {
-            //  We're trying to go through the backdoor but something bad happened.
-            System.out.println ("Reflection Exception: " + e);
-        }
     }
 
     /**
