@@ -5,9 +5,9 @@
 package com.buddhadata.sandbox.neo4j.filings;
 
 import com.buddhadata.sandbox.neo4j.filings.node.*;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+
 import generated.*;
 
 import org.neo4j.driver.Driver;
@@ -127,71 +127,43 @@ public class PublicFilingLoader {
     private void createCaches () {
 
         //  Create the client cache using Guava.
-        clientCache = CacheBuilder.newBuilder()
-                .maximumSize(250)
-                .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
-                .build(
-                    new CacheLoader<String,Client>() {
-                        public Client load (String key) {
-                            return sessionFactory.openSession().queryForObject (Client.class, CLIENT_QUERY,
-                                    Collections.singletonMap(CLIENT_PARAM_NAME, key));
-                        }
-                    }
+        clientCache = Caffeine.newBuilder()
+                .maximumSize(1_000)
+                .build(key -> sessionFactory.openSession().queryForObject (Client.class, CLIENT_QUERY,
+                        Collections.singletonMap(CLIENT_PARAM_NAME, key))
                 );
 
-        gentCache = CacheBuilder.newBuilder()
+        gentCache = Caffeine.newBuilder()
                 .maximumSize(250)
-                .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
-                .build(
-                        new CacheLoader<String,GovernmentEntity>() {
-                            public GovernmentEntity load (String key) {
-                                return sessionFactory.openSession().queryForObject (GovernmentEntity.class, ENTITY_QUERY,
-                                        Collections.singletonMap(ENTITY_PARAM_NAME, key));
-
-                            }
-                        }
+                .build(key -> sessionFactory.openSession().queryForObject (GovernmentEntity.class, ENTITY_QUERY,
+                        Collections.singletonMap(ENTITY_PARAM_NAME, key))
                 );
 
-        issueCache = CacheBuilder.newBuilder()
+        issueCache = Caffeine.newBuilder()
                 .maximumSize(250)
-                .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
-                .build(
-                        new CacheLoader<String, Issue>() {
-                            public Issue load (String key) {
-                                return sessionFactory.openSession().queryForObject (Issue.class, ISSUE_QUERY,
-                                        Collections.singletonMap(ISSUE_PARAM_CODE, key));
-                            }
+                .build(key ->  sessionFactory.openSession().queryForObject (Issue.class, ISSUE_QUERY,
+                        Collections.singletonMap(ISSUE_PARAM_CODE, key))
+                );
+
+        lobbyistCache = Caffeine.newBuilder()
+                .maximumSize(250)
+                .build(key -> {
+                            //  Create map to hold parameters, there are always two parts of the key and, if there
+                            //  aren't two, all sorts of nastyness will occur.
+                            Map<String,Object> params = Map.of(
+                                LOBBYIST_PARAM_SURNAME, key.getSurname(),
+                                LOBBYIST_PARAM_FIRSTNAME, key.getFirstName()
+                            );
+
+                            //  Execute query and hope for the best
+                            return sessionFactory.openSession().queryForObject (Lobbyist.class, LOBBYIST_QUERY, params);
                         }
                 );
 
-        lobbyistCache = CacheBuilder.newBuilder()
+        registrantCache = Caffeine.newBuilder()
                 .maximumSize(250)
-                .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
-                .build(
-                        new CacheLoader<LobbyistKey, Lobbyist>() {
-                            public Lobbyist load (LobbyistKey key) {
-                                //  Create map to hold parameters, there are always two parts of the key and, if there
-                                //  aren't two, all sorts of nastyness will occur.
-                                Map<String,Object> params = new HashMap<>(2);
-                                params.put (LOBBYIST_PARAM_SURNAME, key.getSurname());
-                                params.put (LOBBYIST_PARAM_FIRSTNAME, key.getFirstName());
-
-                                //  Execute query and hope for the best
-                                return sessionFactory.openSession().queryForObject (Lobbyist.class, LOBBYIST_QUERY, params);
-                            }
-                        }
-                );
-
-        registrantCache = CacheBuilder.newBuilder()
-                .maximumSize(250)
-                .concurrencyLevel(CONCURRENCY_THREAD_COUNT)
-                .build(
-                  new CacheLoader<Long,Registrant>() {
-                      public Registrant load (Long key) {
-                          return sessionFactory.openSession().queryForObject (Registrant.class, REGISTRANT_QUERY,
-                                  Collections.singletonMap(REGISTRANT_PARAM_NAME, key));
-                      }
-                  }
+                .build(key -> sessionFactory.openSession().queryForObject (Registrant.class, REGISTRANT_QUERY,
+                        Collections.singletonMap(REGISTRANT_PARAM_NAME, key))
                 );
     }
 
@@ -432,7 +404,7 @@ public class PublicFilingLoader {
 
         //  Return all the files - which should be just XML - in the given folder file, sorted.
         List<File> toReturn = Arrays.asList(folder.listFiles());
-        toReturn.sort((n1, n2) -> n1.getName().compareTo(n2.getName()));
+        toReturn.sort(Comparator.comparing(File::getName));
         return toReturn;
     }
 
@@ -475,26 +447,11 @@ public class PublicFilingLoader {
     private Client findOrCreateClient (ClientType client) {
 
         //  Clients are unique by ID, attempt to find in cache or database
-        Client toReturn;
         String clientName = client.getClientName().trim();
-        try {
-            toReturn = clientCache.get(clientName);
-        } catch (Exception e) {
-            //  Exception is thrown when the client doesn't exist in either the cache or the database, which
-            //  just means that the client needs to be created.
-            toReturn = null;
-        }
-
-        //  If client doesn't already exist, create a new one.
-        if (toReturn == null) {
-            toReturn = new Client (client.getClientID(), clientName, client.getGeneralDescription(), client.getContactFullname(),
+        return clientCache.get(clientName, k ->
+            new Client (client.getClientID(), k, client.getGeneralDescription(), client.getContactFullname(),
                 client.getClientCountry(), client.getClientPPBCountry(), client.getClientState(), client.getClientPPBState(),
-                Boolean.valueOf(client.getSelfFiler()), Boolean.valueOf(client.getIsStateOrLocalGov()));
-            clientCache.put(clientName, toReturn);
-        }
-
-
-        return toReturn;
+                Boolean.valueOf(client.getSelfFiler()), Boolean.valueOf(client.getIsStateOrLocalGov())));
     }
 
     /**
@@ -517,21 +474,8 @@ public class PublicFilingLoader {
             String surname = name.substring(0, comma).trim();
             LobbyistKey key = new LobbyistKey(firstName, surname);
 
-            //  Look in the cache and see if the client already exists
-            try {
-                toReturn = lobbyistCache.get(key);
-            } catch (Exception e) {
-                //  Exception most likely thrown because the lobbyist wasn't found in cache or database, which just
-                //  means it'll need to be created.
-                toReturn = null;
-            }
-
-            //  If lobbyist doesn't already exist, create a new one.
-            if (toReturn == null) {
-                toReturn = new Lobbyist(firstName, surname, lobbyist.getLobbyistCoveredGovPositionIndicator(),
-                        lobbyist.getOfficialPosition(), lobbyist.getActivityInformation());
-                lobbyistCache.put(key, toReturn);
-            }
+            toReturn = lobbyistCache.get(key, k -> new Lobbyist(firstName, surname, lobbyist.getLobbyistCoveredGovPositionIndicator(),
+                        lobbyist.getOfficialPosition(), lobbyist.getActivityInformation()));
 
             //  Add the registrant to the set of all registrants who employ the lobbyist.  As a set, can just do a put
             //  and don't need to check whether it's already there.  Then save the lobbyist
@@ -547,25 +491,7 @@ public class PublicFilingLoader {
      * @return <code>GovernmentEntity</code>
      */
     private GovernmentEntity findOrCreateEntity (GovernmentEntityType governmentEntity) {
-
-        //  Get from cache or database, using Guava cache to do  work.
-        GovernmentEntity toReturn;
-        try {
-            toReturn = gentCache.get(governmentEntity.getGovEntityName());
-        } catch (Exception e) {
-            //  An exception is thrown when a null is returned, indicating the entity doesn't exist, which is fine
-            //  because we'll just create it.
-            toReturn = null;
-        }
-
-        //  If government entity node doesn't exist, create a new one.
-        if (toReturn == null) {
-            toReturn = new GovernmentEntity(governmentEntity.getGovEntityName());
-            gentCache.put(governmentEntity.getGovEntityName(), toReturn);
-        }
-
-
-        return toReturn;
+        return gentCache.get(governmentEntity.getGovEntityName(), GovernmentEntity::new);
     }
 
     /**
@@ -575,24 +501,7 @@ public class PublicFilingLoader {
      */
     private Issue findOrCreateIssue (String issueCode) {
 
-        //  Execute query and hope for the best
-        Issue toReturn;
-        try {
-            toReturn = issueCache.get(issueCode);
-        } catch (Exception e) {
-            //  When the issue isn't found in either the cache or the database, an exception is thrown, which just means
-            //  it needs to be created.
-            toReturn = null;
-        }
-
-        //  If issue does not already exist, create
-        if (toReturn == null) {
-            toReturn = new Issue (issueCode);
-            issueCache.put(issueCode, toReturn);
-        }
-
-
-        return toReturn;
+        return issueCache.get(issueCode, Issue::new);
     }
 
     /**
@@ -604,29 +513,12 @@ public class PublicFilingLoader {
     private Registrant findOrCreateRegistrant (RegistrantType registrant,
                                                Client client) {
 
-        //  Hopefully the registrant already exists in the cache or database.
-        Registrant toReturn;
-        try {
-            toReturn = registrantCache.get(registrant.getRegistrantID());
-        } catch (Exception e) {
-            //  An exeption is thrown when the registrant isn't found in either the cache or the database, which is fine
-            //  because just means we need top create.
-            toReturn = null;
-        }
-
-        //  If registrant node doesn't exist, create a new one.
-        if (toReturn == null) {
-            toReturn = new Registrant(registrant.getRegistrantID(), registrant.getRegistrantName(), registrant.getGeneralDescription(),
-                    registrant.getAddress(), registrant.getRegistrantCountry(), registrant.getRegistrantPPBCountry());
-            toReturn.getClients().add(client);
-            registrantCache.put(registrant.getRegistrantID(), toReturn);
-        }
+        Registrant toReturn = registrantCache.get(registrant.getRegistrantID(), k -> new Registrant(k, registrant.getRegistrantName(), registrant.getGeneralDescription(),
+                    registrant.getAddress(), registrant.getRegistrantCountry(), registrant.getRegistrantPPBCountry()));
 
         //  Add the client to the set who employ the registrant.  Because it's a set, no need to check for existance,
         //  just put and then save.
         toReturn.getClients().add(client);
-
-
         return toReturn;
     }
 
