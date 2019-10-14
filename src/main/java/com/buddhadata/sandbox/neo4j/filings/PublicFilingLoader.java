@@ -252,9 +252,9 @@ public class PublicFilingLoader {
                 System.out.print("Processing " + sourceName + ": ");
                 long start = System.currentTimeMillis();
 
-                for (FilingType one : filings.getFiling()) {
+                Session session = sessionFactory.openSession();
 
-                    Session session = sessionFactory.openSession();
+                for (FilingType one : filings.getFiling()) {
 
                     //  Filings with no amount specified are those filed indicating no lobbying activty
                     //  by the registrant in the current quarter
